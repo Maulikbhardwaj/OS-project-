@@ -1,8 +1,4 @@
-# system_mem.py
-# Cross-platform memory snapshot for your report/demo.
-# - Linux: parses /proc/meminfo (and optionally `free -m`)
-# - macOS: parses `vm_stat` (pages) and converts to MB
-# No external deps.
+
 
 import platform
 import re
@@ -21,7 +17,7 @@ def _linux_meminfo():
         k, v = line.split(":", 1)
         kv[k.strip()] = v.strip()
     def to_mb(s):
-        # e.g., "16312928 kB"
+        
         m = re.search(r"([0-9]+)\s*kB", s)
         return int(m.group(1)) // 1024 if m else None
     total = to_mb(kv.get("MemTotal", ""))
@@ -40,13 +36,9 @@ def _linux_meminfo():
     }
 
 def _macos_vm_stat():
-    # Example:
-    # Mach Virtual Memory Statistics: (page size of 4096 bytes)
-    # Pages free:                               12345.
-    # Pages active:                             67890.
-    # ...
+    
     text = _run("vm_stat")
-    # page size
+    
     m = re.search(r"page size of\s+(\d+)\s+bytes", text)
     page_size = int(m.group(1)) if m else 4096
     pages = {}
@@ -56,7 +48,7 @@ def _macos_vm_stat():
             k = k.strip()
             v = int(re.sub(r"[^\d]", "", v)) if re.search(r"\d", v) else 0
             pages[k] = v
-    # Approximate totals (macOS doesn't expose MemAvailable directly)
+    
     free_pages = pages.get("Pages free", 0) + pages.get("Pages speculative", 0)
     active = pages.get("Pages active", 0)
     inactive = pages.get("Pages inactive", 0)
@@ -74,6 +66,22 @@ def _macos_vm_stat():
         "cached_mb": None,
         "source": "vm_stat"
     }
+def _macos_detailed_snapshot():
+    """Show Linux-equivalent system metrics for macOS (for report use)."""
+    print("\n[macOS DETAILED SNAPSHOT]")
+
+    # Equivalent to Linux's 'vmstat -s'
+    print("==> vm_stat:")
+    print(_run("vm_stat"))
+
+    # Equivalent to 'free -m' → we’ll show total/used/free from top
+    print("\n==> top -l 1 | grep PhysMem:")
+    print(_run("top -l 1 | grep PhysMem"))
+
+    # Equivalent to '/proc/meminfo' → total system memory
+    print("\n==> sysctl hw.memsize:")
+    print(_run("sysctl hw.memsize"))
+
 
 def snapshot():
     sys = platform.system().lower()
@@ -81,6 +89,7 @@ def snapshot():
         if "linux" in sys:
             return _linux_meminfo()
         if "darwin" in sys:
+            _macos_detailed_snapshot()
             return _macos_vm_stat()
     except Exception as e:
         return {"error": str(e)}
@@ -101,3 +110,19 @@ def pretty_print(snap: dict):
         print(f"  Cached:     {snap['cached_mb']} MB")
 
 
+if __name__ == "__main__":
+    from system_mem import snapshot, pretty_print  
+
+    
+    try:
+        
+        import platform
+        if platform.system().lower().startswith("darwin"):
+            
+            from system_mem import _macos_detailed_snapshot
+            _macos_detailed_snapshot()
+    except Exception:
+        pass
+
+    snap = snapshot()
+    pretty_print(snap)

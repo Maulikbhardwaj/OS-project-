@@ -1,7 +1,4 @@
-# subnet_simple.py
-# Minimal subnet calculator:
-# - Show network, mask, broadcast, usable range
-# - Optional: split into subnets that can each fit 'hosts_per_subnet' (greedy VLSM)
+
 
 import ipaddress
 from typing import List, Tuple, Optional
@@ -26,8 +23,6 @@ def info(cidr: str) -> dict:
     }
 
 def needed_prefix_for_hosts(hosts_per_subnet: int) -> int:
-    # For a classic subnet, usable hosts = 2^(32-p) - 2  (except /31,/32)
-    # Find smallest p s.t. usable_hosts >= hosts_per_subnet
     for p in range(32, -1, -1):
         total = 2 ** (32 - p)
         usable = total if p >= 31 else total - 2
@@ -39,12 +34,11 @@ def split_for_hosts(cidr: str, hosts_per_subnet: int) -> List[str]:
     net = ipaddress.ip_network(cidr, strict=False)
     target_p = needed_prefix_for_hosts(hosts_per_subnet)
     if target_p < net.prefixlen:
-        # Can't make subnets that are bigger than the original; just return original
         return [str(net)]
-    # If target is equal or longer prefix (i.e., smaller subnets), subdivide
+    
     if target_p == net.prefixlen:
         return [str(net)]
-    # ipaddress.subnets() splits by +1 prefix at a time; iterate until we reach target
+    
     subnets = [net]
     p = net.prefixlen
     while p < target_p:
@@ -71,11 +65,18 @@ def show(cidr: str, hosts_per_subnet: Optional[int] = None) -> None:
             print(f"  {si['network']}/{si['prefix']}  "
                   f"mask={si['mask']}  usable={si['hosts_usable']}  "
                   f"range={si['usable_first']}–{si['usable_last']}")
+def to_bin(ip: str) -> str:
+    return '.'.join(f'{int(octet):08b}' for octet in ip.split('.'))
+
 
 if __name__ == "__main__":
-    # quick demos:
-    # python subnet_simple.py
-    # or modify below to test different inputs
+    
     show("192.168.10.0/24")
     print("\n---")
     show("192.168.10.0/24", hosts_per_subnet=50)
+    base = info("192.168.10.0/24")
+    print(f"Mask (binary):      {to_bin(base['mask'])}")
+    print(f"Network (binary):   {to_bin(base['network'])}")
+    print(f"Broadcast (binary): {to_bin(base['broadcast'])}")
+
+

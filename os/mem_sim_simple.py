@@ -1,41 +1,31 @@
-# mem_sim_simple.py
-# A tiny, beginner-friendly memory allocator simulator:
-# - Process class (instances = your jobs)
-# - Blocks list to represent memory
-# - First-Fit / Best-Fit / Worst-Fit / Next-Fit as separate methods
-# - Deallocate + coalesce + (optional) compact
-# - Simple print helpers
+
 
 from dataclasses import dataclass
 from typing import List, Optional
 from system_mem import snapshot
+from system_mem import pretty_print
 
-
-# ---------- Models ----------
 @dataclass
 class Process:
     name: str
     size: int
-
-
 @dataclass
 class Block:
     start: int
     size: int
     free: bool = True
-    tag: Optional[str] = None  # which process occupies it, if any
+    tag: Optional[str] = None  
 
     @property
     def end(self) -> int:
-        return self.start + self.size  # [start, end)
+        return self.start + self.size  
 
-
-# ---------- Memory ----------
 class Memory:
     def __init__(self, total: int, initial_free_sizes: Optional[List[int]] = None):
         self.total = total
         self.blocks: List[Block] = []
-        self._next_fit_index = 0  # where Next-Fit will resume scanning
+        self._next_fit_index = 0  
+        self._compaction_bytes_moved = 0
 
         if initial_free_sizes:
             pos = 0
@@ -47,9 +37,8 @@ class Memory:
         else:
             self.blocks = [Block(start=0, size=total, free=True)]
 
-    # ---- Helpers ----
+    
     def _coalesce(self) -> None:
-        """Merge adjacent free blocks so they become one bigger free hole."""
         self.blocks.sort(key=lambda b: b.start)
         merged: List[Block] = []
         for b in self.blocks:
@@ -64,7 +53,7 @@ class Memory:
         self.blocks = merged
 
     def compact(self) -> None:
-        """Slide all used blocks to the left; create one free block at the end."""
+        
         cur = 0
         new_blocks: List[Block] = []
         for b in sorted(self.blocks, key=lambda x: x.start):
@@ -76,7 +65,7 @@ class Memory:
         self.blocks = new_blocks
         self._next_fit_index = 0
 
-    # ---- Strategies ----
+    
     def _find_first_fit(self, need: int) -> Optional[int]:
         for i, b in enumerate(self.blocks):
             if b.free and b.size >= need:
@@ -101,13 +90,13 @@ class Memory:
             i = (self._next_fit_index + off) % n
             b = self.blocks[i]
             if b.free and b.size >= need:
-                self._next_fit_index = i  # next scan resumes here
+                self._next_fit_index = i  
                 return i
         return None
 
-    # ---- Public API ----
+    
     def allocate(self, process: Process, method: str) -> bool:
-        """Place `process` using a strategy: 'first', 'best', 'worst', 'next'."""
+        
         method = method.lower()
         if method == "first":
             idx = self._find_first_fit(process.size)
@@ -121,7 +110,7 @@ class Memory:
             raise ValueError("method must be one of: first, best, worst, next")
 
         if idx is None:
-            return False  # no hole big enough
+            return False 
 
         hole = self.blocks[idx]
         if hole.size == process.size:
@@ -145,7 +134,7 @@ class Memory:
             self._coalesce()
         return changed
 
-    # ---- Printing ----
+    
     def print_table(self) -> None:
         print("Start  End    Size   State   Tag")
         for b in sorted(self.blocks, key=lambda x: x.start):
@@ -158,41 +147,60 @@ class Memory:
             w = max(1, int(width * b.size / self.total))
             segs.append(("#" if not b.free else "-") * w)
         print(f"[0]{''.join(segs)}[{self.total}]  (#=used, -=free)")
-def summarize_sim(mem) -> dict:
-    total = mem.total
-    free_blocks = [b for b in mem.blocks if b.free]
-    used_blocks = [b for b in mem.blocks if not b.free]
-    free_total = sum(b.size for b in free_blocks)
-    used_total = sum(b.size for b in used_blocks)
-    largest_hole = max((b.size for b in free_blocks), default=0)
-    ext_frag = 0.0 if free_total == 0 else (free_total - largest_hole) / free_total
-    return {
-        "sim_total": total,
-        "sim_used": used_total,
-        "sim_free": free_total,
-        "sim_largest_hole": largest_hole,
-        "sim_ext_frag_ratio": round(ext_frag, 3),
-    }
+    def stats(self) -> dict:
+        free_blocks = [b for b in self.blocks if b.free]
+        used_blocks = [b for b in self.blocks if not b.free]
+        free_total  = sum(b.size for b in free_blocks)
+        used_total  = sum(b.size for b in used_blocks)
+        largest_hole = max((b.size for b in free_blocks), default=0)
+        ext_frag = 0.0 if free_total == 0 else (free_total - largest_hole) / free_total
+        return {
+            "sim_total": self.total,
+            "sim_used": used_total,
+            "sim_free": free_total,
+            "sim_largest_hole": largest_hole,
+            "sim_ext_frag_ratio": round(ext_frag, 3),
+        }
+    def compact(self) -> None:
+        cur = 0
+        moved = 0
+        new_blocks: List[Block] = []
+        for b in sorted(self.blocks, key=lambda x: x.start):
+            if not b.free:
+                if b.start != cur:
+                    moved += b.size
+                new_blocks.append(Block(start=cur, size=b.size, free=False, tag=b.tag))
+                cur += b.size
+        if cur < self.total:
+            new_blocks.append(Block(start=cur, size=self.total - cur, free=True))
+        self.blocks = new_blocks
+        self._next_fit_index = 0
+        self._compaction_bytes_moved += moved
+
+    def compaction_cost(self) -> int:
+        return self._compaction_bytes_moved
+
 
 def print_comparison(mem, sys_snap: dict):
-    sim = summarize_sim(mem)
+    sim = mem.stats()
     print("\n=== Simulator vs System ===")
     print(f"Simulator total units: {sim['sim_total']}")
     print(f"Simulator used units : {sim['sim_used']}")
     print(f"Simulator free units : {sim['sim_free']}")
     print(f"Largest free hole    : {sim['sim_largest_hole']}")
     print(f"External frag (est.) : {sim['sim_ext_frag_ratio']*100:.1f}%")
-    from system_mem import pretty_print
+    print(f"Compaction bytes moved (total): {mem.compaction_cost()}")
+
+    
     print("\nSystem snapshot:")
     pretty_print(sys_snap)
 
 
-# ---------- Minimal demo ----------
+
 if __name__ == "__main__":
-    # Example memory: total 300, free blocks laid out as 90 | 60 | 50 | 100
     mem = Memory(total=300, initial_free_sizes=[90, 60, 50, 100])
 
-    # Create some processes
+    
     A = Process("A", 70)
     B = Process("B", 40)
     C = Process("C", 80)
