@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-"""
-Final upgraded Subnet Calculator
-Combines:
-- Jaskaran's professional CLI version with JSON, overlap check, subnet splitting, binary/wildcard info
-- Harshitha's system IP detection and interactive prompts
-Author: Team OS-project
-"""
+
 
 from __future__ import annotations
 import ipaddress
@@ -17,7 +10,7 @@ import json
 from typing import List, Optional, Dict
 
 
-# ---------------- Utility Functions ---------------- #
+
 
 def to_bin(ip: str) -> str:
     """Convert dotted-decimal IP to binary"""
