@@ -264,7 +264,7 @@ This generates:
 ### `reports/`
 - **`analysis_report.py`**: Generates visual analysis reports using matplotlib for memory and paging metrics
 
-## 📊 Examples
+##  Examples
 
 ### Memory Allocation Example Output
 
